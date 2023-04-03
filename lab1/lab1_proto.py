@@ -2,6 +2,7 @@
 
 # Function given by the exercise ----------------------------------
 from lab1_tools import lifter
+from lab1_tools import tidigit2labels
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import lfilter
@@ -10,6 +11,7 @@ from scipy.fftpack import fft
 from lab1_tools import *
 from scipy.fftpack import dct
 from sklearn.mixture import GaussianMixture
+from scipy.cluster.hierarchy import dendrogram, linkage
 
 example = np.load('lab1_example.npz', allow_pickle=True)['example'].item()
 
@@ -234,6 +236,38 @@ def dtw(x, y, dist):
 
     Note that you only need to define the first output for this exercise.
     """
+    loc_dist = np.zeros((x.shape[0], y.shape[0]))
+    acc_dist = np.zeros((x.shape[0], y.shape[0]))
+    for i in range(x.shape[0]):
+        for j in range(y.shape[0]):
+            loc_dist[i][j] = dist(x[i], y[j])
+    for i in range(1, x.shape[0]):
+        acc_dist[i][0] = acc_dist[i - 1][0] + loc_dist[i][0]
+    for j in range(1, y.shape[0]):
+        acc_dist[0][j] = acc_dist[0][j - 1] + loc_dist[0][j]
+   
+    for i in range(1, x.shape[0]):
+        for j in range(1, y.shape[0]):
+            acc_dist[i][j] = loc_dist[i][j] + min(acc_dist[i - 1][j], acc_dist[i][j - 1], acc_dist[i - 1][j - 1])
+    
+    path = []
+    i = x.shape[0] - 1
+    j = y.shape[0] - 1
+    while i > 0 and j > 0:
+        path.append((i, j))
+        if acc_dist[i - 1][j] == min(acc_dist[i - 1][j], acc_dist[i][j - 1], acc_dist[i - 1][j - 1]):
+            i -= 1
+        elif acc_dist[i][j - 1] == min(acc_dist[i - 1][j], acc_dist[i][j - 1], acc_dist[i - 1][j - 1]):
+            j -= 1
+        else:
+            i -= 1
+            j -= 1
+    path.append((i, j))
+    path.reverse()
+    return acc_dist[-1][-1] / (x.shape[0] + y.shape[0]), loc_dist, acc_dist, path
+    
+
+
 
 def GMM(mfcc_data,mfcc_uttarances):
     components=[4,8,16,32]
@@ -268,3 +302,23 @@ def plot_posterior(posterior, data, utt):
     plt.title('Posterior probabilities')
     plt.tight_layout()
     plt.show()
+
+def hierarchical_clustering(distance_matrix, labels):
+    """Hierarchical clustering.
+
+    Args:
+        distance_matrix: NxN matrix of pairwise distances between N sequences
+        labels: N labels for the sequences
+
+    Outputs:
+        Z: linkage matrix
+        T: dendrogram tree
+        fig: figure handle
+
+    Note that you only need to define the first output for this exercise.
+    """
+    Z = linkage(distance_matrix, 'single')
+    T = dendrogram(Z,labels=labels)
+    fig = plt.gcf()
+    plt.show()
+    return Z, T, fig
