@@ -8,10 +8,10 @@ from scipy.signal import lfilter
 from scipy.signal.windows import hamming
 from scipy.fftpack import fft
 from lab1_tools import *
-from scipy.fftpack.realtransforms import dct
+from scipy.fftpack import dct
+from sklearn.mixture import GaussianMixture
 
 example = np.load('lab1_example.npz', allow_pickle=True)['example'].item()
-
 
 def mspec(samples, winlen=400, winshift=200, preempcoeff=0.97, nfft=512, samplingrate=20000):
     """Computes Mel Filterbank features.
@@ -53,9 +53,8 @@ def mfcc(samples, winlen=400, winshift=200, preempcoeff=0.97, nfft=512, nceps=13
     mspecs = mspec(samples, winlen, winshift, preempcoeff, nfft, samplingrate)
     ceps = cepstrum(mspecs, nceps)
     tmp = lifter(ceps, liftercoeff)
-    plt.pcolormesh(tmp.T)
-    plt.show()
-
+    # plt.pcolormesh(tmp.T)
+    # plt.show()
     return tmp
 
 
@@ -79,8 +78,8 @@ def enframe(samples, winlen, winshift):
     for i in range(num_frames):
         frames[i] = samples[i * winshift: i * winshift + winlen]
 
-    plt.pcolormesh(frames.T)
-    plt.show()
+    # plt.pcolormesh(frames.T)
+    # plt.show()
 
     return frames
 
@@ -103,8 +102,8 @@ def preemp(input, p=0.97):
 
     output = np.apply_along_axis(lambda x: lfilter(b, a, x), 1, input)
 
-    plt.pcolormesh(output.T)
-    plt.show()
+    # plt.pcolormesh(output.T)
+    # plt.show()
 
     return output
 
@@ -125,8 +124,8 @@ def windowing(input):
 
     output = input * window
 
-    plt.pcolormesh(output.T)
-    plt.show()
+    # plt.pcolormesh(output.T)
+    # plt.show()
 
     return output
 
@@ -149,8 +148,8 @@ def powerSpectrum(input, nfft):
 
     # power_spectrum = power_spectrum[:, :nfft // 2 + 1]
 
-    plt.pcolormesh(power_spectrum.T)
-    plt.show()
+    # plt.pcolormesh(power_spectrum.T)
+    # plt.show()
     return power_spectrum
 
 
@@ -178,11 +177,9 @@ def logMelSpectrum(input, samplingrate):
 
     output = np.log(result)
 
-    print(np.sum(output - example['mspec']))
-
-    plt.figure(figsize=(100, 20))
-    plt.pcolormesh(output.T)
-    plt.show()
+    # plt.figure(figsize=(100, 20))
+    # plt.pcolormesh(output.T)
+    # plt.show()
     return output
 
 
@@ -201,10 +198,24 @@ def cepstrum(input, nceps):
     output = dct(input)
     output = output[:,:nceps]
     output = np.asarray(output)
-    print(output-example['mfcc'])
-    plt.pcolormesh(output.T)
-    plt.show()
+    # plt.pcolormesh(output.T)
+    # plt.show()
     return output
+
+
+def get_all_data():
+    data = np.load('lab1_data.npz', allow_pickle=True)['data']
+    result_mfcc=[]
+    result_mspec=[]
+    #Concatenate all the MFCC frames from all utterances in the data array into a big feature [N × M] array where N is the total number of frames in the data set and M is the number of coefficients.
+    for i, d in enumerate(data):
+        sample=d['samples']
+        samp_rate=d['samplingrate']
+        result_mfcc.append(mfcc(sample,samplingrate=samp_rate))
+        result_mspec.append(mspec(sample,samplingrate=samp_rate))
+    return result_mfcc,result_mspec
+
+
 
 
 def dtw(x, y, dist):
@@ -223,3 +234,37 @@ def dtw(x, y, dist):
 
     Note that you only need to define the first output for this exercise.
     """
+
+def GMM(mfcc_data,mfcc_uttarances):
+    components=[4,8,16,32]
+    data = np.load('lab1_data.npz', allow_pickle=True)['data']
+    utt=[16,17,38,25]
+    for c in components:
+        gmm = GaussianMixture(n_components=c, covariance_type='diag')
+        gmm.fit(mfcc_data)
+        for u in utt:
+            posterior = gmm.predict_proba(mfcc_uttarances[u])
+            plot_posterior(posterior, data, u)
+
+
+
+
+def plot_posterior(posterior, data, utt):
+    sum_posterior = np.sum(posterior, axis=0).reshape(1,-1)
+    sum_posterior /= np.sum(posterior)
+    print('Sum of posterior probabilities for each Gaussian component: {}'.format(sum_posterior))
+    #print the index of the Gaussian component with the highest posterior probability for each frame
+    print('Index of the Gaussian component with the highest posterior probability for each frame: {}'.format(np.argmax(sum_posterior, axis=1)))
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(data[utt]['samples'])
+    plt.xlabel('Sample index')
+    plt.ylabel('Amplitude')
+    plt.title('Waveform')
+    plt.subplot(1, 2, 2)
+    plt.imshow(posterior.T, aspect='auto', origin='lower')
+    plt.xlabel('Frame index')
+    plt.ylabel('Gaussian component')
+    plt.title('Posterior probabilities')
+    plt.tight_layout()
+    plt.show()
