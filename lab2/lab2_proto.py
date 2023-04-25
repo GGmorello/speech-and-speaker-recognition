@@ -95,18 +95,6 @@ def concatHMMs(hmmmodels, namelist):
     return concat
 
 
-def gmmloglik(log_emlik, weights):
-    """Log Likelihood for a GMM model based on Multivariate Normal Distribution.
-
-    Args:
-        log_emlik: array like, shape (N, K).
-            contains the log likelihoods for each of N observations and
-            each of K distributions
-        weights:   weight vector for the K components in the mixture
-
-    Output:
-        gmmloglik: scalar, log likelihood of data given the GMM model.
-    """
 
 def forward(log_emlik, log_startprob, log_transmat):
     """Forward (alpha) probabilities in log domain.
@@ -137,6 +125,12 @@ def backward(log_emlik, log_startprob, log_transmat):
     Output:
         backward_prob: NxM array of backward log probabilities for each of the M states in the model
     """
+    log_beta=np.zeros(log_emlik.shape)
+    log_beta[-1]=0
+    for i in range(log_emlik.shape[0]-2,-1,-1):
+        for j in range(log_emlik.shape[1]):
+            log_beta[i,j]=logsumexp(log_beta[i+1]+log_transmat[j,:-1]+log_emlik[i+1])
+    return log_beta
 
 def viterbi(log_emlik, log_startprob, log_transmat, forceFinalState=True):
     """Viterbi path.
@@ -169,7 +163,7 @@ def viterbi(log_emlik, log_startprob, log_transmat, forceFinalState=True):
         viterbi_path[-1] = np.argmax(delta[-1])
         for i in range(log_emlik.shape[0]-2,-1,-1):
             viterbi_path[i]=psi[i+1,viterbi_path[i+1]]
-            
+
     viterbi_loglik = np.max(delta[-1])
     return viterbi_loglik, viterbi_path
 
@@ -184,6 +178,9 @@ def statePosteriors(log_alpha, log_beta):
     Output:
         log_gamma: NxM array of gamma probabilities for each of the M states in the model
     """
+    log_gamma = log_alpha + log_beta
+    log_gamma -= logsumexp(log_gamma, axis=1)[:, np.newaxis]
+    return log_gamma
 
 def updateMeanAndVar(X, log_gamma, varianceFloor=5.0):
     """ Update Gaussian parameters with diagonal covariance
@@ -200,3 +197,28 @@ def updateMeanAndVar(X, log_gamma, varianceFloor=5.0):
          means: MxD mean vectors for each state
          covars: MxD covariance (variance) vectors for each state
     """
+    mean=np.zeros((log_gamma.shape[1],X.shape[1]))
+    covars=np.zeros((log_gamma.shape[1],X.shape[1]))
+    for i in range(log_gamma.shape[1]):
+        mean[i]=np.sum(np.exp(log_gamma[:,i])[:,np.newaxis]*X,axis=0)/np.sum(np.exp(log_gamma[:,i]))
+        covars[i]=np.sum(np.exp(log_gamma[:,i])[:,np.newaxis]*(X-mean[i])**2,axis=0)/np.sum(np.exp(log_gamma[:,i]))
+        covars[i]=np.maximum(covars[i],varianceFloor)
+    return mean,covars
+
+
+
+def gmmloglik(log_emlik, weights):
+    """Log Likelihood for a GMM model based on Multivariate Normal Distribution.
+
+    Args:
+        log_emlik: array like, shape (N, K).
+            contains the log likelihoods for each of N observations and
+            each of K distributions
+        weights:   weight vector for the K components in the mixture
+
+    Output:
+        gmmloglik: scalar, log likelihood of data given the GMM model.
+    """
+    gmmloglik=np.sum(logsumexp(log_emlik+np.log(weights),axis=1))
+    return gmmloglik
+
