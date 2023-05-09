@@ -286,9 +286,6 @@ def GMM(mfcc_data,mfcc_uttarances):
 def plot_posterior(posterior, data, utt):
     sum_posterior = np.sum(posterior, axis=0).reshape(1,-1)
     sum_posterior /= np.sum(posterior)
-    print('Sum of posterior probabilities for each Gaussian component: {}'.format(sum_posterior))
-    #print the index of the Gaussian component with the highest posterior probability for each frame
-    print('Index of the Gaussian component with the highest posterior probability for each frame: {}'.format(np.argmax(sum_posterior, axis=1)))
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)
     plt.plot(data[utt]['samples'])

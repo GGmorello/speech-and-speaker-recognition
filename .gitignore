@@ -1,0 +1,16 @@
+
+.DS_Store/
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/inspectionProfiles/Project_Default.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/speech-and-speaker-recognition.iml
+.idea/vcs.xml
+.DS_Store
+tidigits/
+__pycache__/
+*.npz
+*.lab
+lab1/lab1_example.npz
+lab2/lab2_models_all.npz
+lab3/lab3_example.npz
