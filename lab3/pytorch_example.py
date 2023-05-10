@@ -6,83 +6,122 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.preprocessing import LabelEncoder
 
-# define the neural network architecture
 class Net(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim, output_dim):
         super(Net, self).__init__()
+        self.fc1 = nn.Linear(input_dim, 256)
+        self.fc2= nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, output_dim)
 
-        # define the layers of your network here
-        # ...
     def forward(self, x):
-        # define the foward computation from input to output
-        # ...
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
 
 def count_parameters(net):
     return sum(p.numel() for p in net.parameters() if p.requires_grad)
 
-# instantiate the network and print the structure
-net = Net()
+def load_data():
+    lmfcc_train_x = np.load('lab3/d_lmfcc_train.npz')['d_lmfcc_train']
+    lmfcc_val_x = np.load('lab3/d_lmfcc_val.npz')['d_lmfcc_val']
+    lmfcc_test_x = np.load('lab3/d_lmfcc_test.npz')['d_lmfcc_test']
+    one_hot_train_y = np.load('lab3/one_hot_train_y.npz')['one_hot_train_y']
+    one_hot_val_y = np.load('lab3/one_hot_val_y.npz')['one_hot_val_y']
+    one_hot_test_y = np.load('lab3/one_hot_test_y.npz')['one_hot_test_y']
+    return lmfcc_train_x, lmfcc_val_x, lmfcc_test_x, one_hot_train_y, one_hot_val_y, one_hot_test_y
+
+train_x, val_x, test_x, train_y, val_y, test_y = load_data()
+
+# Convert string labels to numerical format
+
+output_dim = train_y.shape[1]
+
+# Instantiate the network and print the structure
+net = Net(train_x.shape[1], output_dim)
 print(net)
-print('number of prameters:'count_parameters(net))
+print('Number of parameters:', count_parameters(net))
 
-# define your loss criterion (see https://pytorch.org/docs/stable/nn.html#loss-functions)
-# criterion = ... 
+# Define the loss criterion
+criterion = nn.CrossEntropyLoss()
 
-# define the optimizer 
+# Define the optimizer
 optimizer = torch.optim.Adam(net.parameters())
 
-# prepare/load the data into tensors 
-# train_x = ..., train_y = ..., val_x = ..., val_y = ..., test_x = ..., test_y = ...
+batch_size = 128
 
-batch_size = 256
-
-# create the data loaders for training and validation sets
-train_dataset = torch.utils.data.TensorDataset(train_x, train_y)
+# Create the data loaders for training and validation sets
+train_dataset = torch.utils.data.TensorDataset(torch.Tensor(train_x), torch.Tensor(train_y).float())
 train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_dataset = torch.utils.data.TensorDataset(val_x, val_y)
+
+val_dataset = torch.utils.data.TensorDataset(torch.Tensor(val_x), torch.Tensor(val_y).float())
 val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-# setup logging so that you can follow training using TensorBoard (see https://pytorch.org/docs/stable/tensorboard.html)
-writer = SummaryWriter()
+# Setup logging for TensorBoard
+#writer = SummaryWriter()
 
-# train the network
+# Train the network
 num_epochs = 100
 
 for epoch in range(num_epochs):
     net.train()
     train_loss = 0.0
     for inputs, labels in train_loader:
-        # zero the parameter gradients
         optimizer.zero_grad()
-        # forward + backward + optimize
         outputs = net(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        # accumulate the training loss
         train_loss += loss.item()
-
-    # calculate the validation loss
     net.eval()
     with torch.no_grad():
         val_loss = 0.0
+        correct=0
         for inputs, labels in val_loader:
             outputs = net(inputs)
             loss = criterion(outputs, labels)
+            #for each datapoint, find the index of the max value in the output vector
+            _, predicted = torch.max(outputs, 1)
+            #for each row in labels find where the value is 1
+            _, labels = torch.max(labels, 1)
+            #count the number of correct predictions
+            correct += (predicted == labels).sum().item()
             val_loss += loss.item()
-
-    # print the epoch loss
+           
+    val_accuracy = correct / len(val_loader.dataset)
     train_loss /= len(train_loader)
     val_loss /= len(val_loader)
+    print(f'Epoch {epoch}: train_loss={train_loss}, val_loss={val_loss}', f'val_accuracy={val_accuracy}')
 
-    print(f'Epoch {epoch}: train_loss={train_loss}, val_loss={val_loss}')
-    writer.add_scalars('loss',{'train':train_loss,'val':val_loss},epoch)
 
-# finally evaluate model on the test set here
-# ...
+#save the model
+torch.save(net.state_dict(), 'lab3/pytorch_model.pt')
 
-# save the trained network
-torch.save(net.state_dict(), 'trained-net.pt')
+# Evaluate the model on the test set
+net.eval()
+
+test_loss = 0.0
+correct = 0
+total = 0
+test_dataset = torch.utils.data.TensorDataset(torch.Tensor(train_x), torch.Tensor(test_y).float())
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+with torch.no_grad():
+    for inputs, labels in test_loader:
+        outputs = net(inputs)
+        loss = criterion(outputs, labels)
+        test_loss += loss.item()
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+
+test_loss /= len(test_loader)
+test_accuracy = correct / total
+
+print(f'Test Loss: {test_loss}, Test Accuracy: {test_accuracy}')
